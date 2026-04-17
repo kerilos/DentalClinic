@@ -35,7 +35,17 @@ public interface IAppDbContext
     Task<Treatment?> GetTreatmentByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Treatment?> GetTreatmentForUpdateByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Treatment>> GetTreatmentsByPatientIdAsync(Guid patientId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<Treatment>> GetTreatmentsForInvoiceAsync(Guid patientId, IReadOnlyCollection<Guid> treatmentIds, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<Guid>> GetTreatmentIdsByInvoiceIdAsync(Guid invoiceId, CancellationToken cancellationToken = default);
     void RemoveTreatment(Treatment treatment);
+
+    Task AddInvoiceAsync(Invoice invoice, CancellationToken cancellationToken = default);
+    Task<Invoice?> GetInvoiceByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Invoice?> GetInvoiceForUpdateByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<Invoice>> GetInvoicesByPatientIdAsync(Guid patientId, CancellationToken cancellationToken = default);
+
+    Task AddPaymentAsync(Payment payment, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<Payment>> GetPaymentsByInvoiceIdAsync(Guid invoiceId, CancellationToken cancellationToken = default);
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -17,6 +17,8 @@ public sealed class AppDbContext : DbContext, IAppDbContext
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Treatment> Treatments => Set<Treatment>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<User> Users => Set<User>();
 
     public Task<User?> GetUserByEmailAsync(string email, CancellationToken cancellationToken = default)
@@ -141,9 +143,70 @@ public sealed class AppDbContext : DbContext, IAppDbContext
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<Treatment>> GetTreatmentsForInvoiceAsync(Guid patientId, IReadOnlyCollection<Guid> treatmentIds, CancellationToken cancellationToken = default)
+    {
+        return await Treatments
+            .Where(treatment =>
+                treatment.PatientId == patientId &&
+                treatment.InvoiceId == null &&
+                treatmentIds.Contains(treatment.Id))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<Guid>> GetTreatmentIdsByInvoiceIdAsync(Guid invoiceId, CancellationToken cancellationToken = default)
+    {
+        return await Treatments
+            .AsNoTracking()
+            .Where(treatment => treatment.InvoiceId == invoiceId)
+            .Select(treatment => treatment.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     public void RemoveTreatment(Treatment treatment)
     {
         Treatments.Remove(treatment);
+    }
+
+    public async Task AddInvoiceAsync(Invoice invoice, CancellationToken cancellationToken = default)
+    {
+        await Invoices.AddAsync(invoice, cancellationToken);
+    }
+
+    public Task<Invoice?> GetInvoiceByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Invoices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(invoice => invoice.Id == id, cancellationToken);
+    }
+
+    public Task<Invoice?> GetInvoiceForUpdateByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Invoices
+            .FirstOrDefaultAsync(invoice => invoice.Id == id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<Invoice>> GetInvoicesByPatientIdAsync(Guid patientId, CancellationToken cancellationToken = default)
+    {
+        return await Invoices
+            .AsNoTracking()
+            .Where(invoice => invoice.PatientId == patientId)
+            .OrderByDescending(invoice => invoice.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AddPaymentAsync(Payment payment, CancellationToken cancellationToken = default)
+    {
+        await Payments.AddAsync(payment, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<Payment>> GetPaymentsByInvoiceIdAsync(Guid invoiceId, CancellationToken cancellationToken = default)
+    {
+        return await Payments
+            .AsNoTracking()
+            .Where(payment => payment.InvoiceId == invoiceId)
+            .OrderBy(payment => payment.PaymentDate)
+            .ThenBy(payment => payment.Id)
+            .ToListAsync(cancellationToken);
     }
 
     public Task<Patient?> GetPatientByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -246,8 +309,41 @@ public sealed class AppDbContext : DbContext, IAppDbContext
                 .HasForeignKey(x => x.PatientId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne<Invoice>()
+                .WithMany()
+                .HasForeignKey(x => x.InvoiceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasIndex(x => x.PatientId);
             entity.HasIndex(x => x.ToothNumber);
+        });
+
+        modelBuilder.Entity<Invoice>(entity =>
+        {
+            entity.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.PaidAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.Status).HasConversion<int>();
+
+            entity.HasOne<Patient>()
+                .WithMany()
+                .HasForeignKey(x => x.PatientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.PatientId);
+        });
+
+        modelBuilder.Entity<Payment>(entity =>
+        {
+            entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.Method).HasConversion<int>();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.HasOne<Invoice>()
+                .WithMany()
+                .HasForeignKey(x => x.InvoiceId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.InvoiceId);
         });
     }
 
