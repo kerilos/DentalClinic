@@ -1,6 +1,9 @@
+using System.Text;
 using DentalClinic.API.Middleware;
 using DentalClinic.Application;
 using DentalClinic.Infrastructure;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -26,6 +29,33 @@ try
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
 
+    var jwtSection = builder.Configuration.GetSection("Jwt");
+    var secretKey = jwtSection["SecretKey"] ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.");
+    var issuer = jwtSection["Issuer"] ?? throw new InvalidOperationException("Jwt:Issuer is not configured.");
+    var audience = jwtSection["Audience"] ?? throw new InvalidOperationException("Jwt:Audience is not configured.");
+
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = issuer,
+            ValidAudience = audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
+
+    builder.Services.AddAuthorization();
+
     var app = builder.Build();
 
     app.UseSerilogRequestLogging();
@@ -38,6 +68,7 @@ try
     }
 
     app.UseHttpsRedirection();
+    app.UseAuthentication();
     app.UseAuthorization();
 
     app.MapHealthChecks("/health");

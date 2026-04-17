@@ -15,6 +15,17 @@ public sealed class AppDbContext : DbContext, IAppDbContext
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<User> Users => Set<User>();
 
+    public Task<User?> GetUserByEmailAsync(string email, CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        return Users.AsNoTracking().FirstOrDefaultAsync(user => user.Email == normalizedEmail, cancellationToken);
+    }
+
+    public async Task AddUserAsync(User user, CancellationToken cancellationToken = default)
+    {
+        await Users.AddAsync(user, cancellationToken);
+    }
+
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         ApplyAuditFields();
@@ -35,10 +46,10 @@ public sealed class AppDbContext : DbContext, IAppDbContext
 
         modelBuilder.Entity<User>(entity =>
         {
-            entity.Property(x => x.FirstName).HasMaxLength(100).IsRequired();
-            entity.Property(x => x.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Email).HasMaxLength(150).IsRequired();
             entity.Property(x => x.PasswordHash).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
             entity.HasIndex(x => x.Email).IsUnique();
         });
     }
