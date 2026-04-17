@@ -68,6 +68,13 @@ public sealed class GlobalExceptionHandlingMiddleware
                     Message = conflictException.Message,
                     TraceId = traceId
                 }),
+            NotFoundException notFoundException =>
+                (HttpStatusCode.NotFound, new ApiError
+                {
+                    Code = "NotFound",
+                    Message = notFoundException.Message,
+                    TraceId = traceId
+                }),
             AuthenticationException authenticationException =>
                 (HttpStatusCode.Unauthorized, new ApiError
                 {
