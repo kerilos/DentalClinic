@@ -20,6 +20,9 @@ obj/
 # Logs
 *.log
 
+# Local deployment secrets (never commit)
+*.local.md
+
 # NuGet packages
 *.nupkg
 *.snupkg

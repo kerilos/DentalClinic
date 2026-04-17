@@ -61,16 +61,19 @@ try
     app.UseSerilogRequestLogging();
     app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
-    if (app.Environment.IsDevelopment())
-    {
-        app.UseSwagger();
-        app.UseSwaggerUI();
-    }
+    app.UseSwagger();
+    app.UseSwaggerUI();
 
     app.UseHttpsRedirection();
     app.UseAuthentication();
     app.UseAuthorization();
 
+    app.MapGet("/", () => Results.Ok(new
+    {
+        service = "DentalClinic.API",
+        status = "running",
+        health = "/health"
+    }));
     app.MapHealthChecks("/health");
     app.MapControllers();
 
