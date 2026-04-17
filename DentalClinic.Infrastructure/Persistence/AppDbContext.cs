@@ -2,6 +2,7 @@ using DentalClinic.Application.Abstractions.Persistence;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Domain.Common;
 using DentalClinic.Domain.Entities;
+using DentalClinic.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace DentalClinic.Infrastructure.Persistence;
@@ -14,6 +15,7 @@ public sealed class AppDbContext : DbContext, IAppDbContext
     }
 
     public DbSet<Patient> Patients => Set<Patient>();
+    public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<User> Users => Set<User>();
 
     public Task<User?> GetUserByEmailAsync(string email, CancellationToken cancellationToken = default)
@@ -30,6 +32,84 @@ public sealed class AppDbContext : DbContext, IAppDbContext
     public async Task AddPatientAsync(Patient patient, CancellationToken cancellationToken = default)
     {
         await Patients.AddAsync(patient, cancellationToken);
+    }
+
+    public Task<User?> GetUserByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(user => user.Id == id, cancellationToken);
+    }
+
+    public async Task AddAppointmentAsync(Appointment appointment, CancellationToken cancellationToken = default)
+    {
+        await Appointments.AddAsync(appointment, cancellationToken);
+    }
+
+    public Task<Appointment?> GetAppointmentByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Appointments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(appointment => appointment.Id == id, cancellationToken);
+    }
+
+    public Task<Appointment?> GetAppointmentForUpdateByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Appointments
+            .FirstOrDefaultAsync(appointment => appointment.Id == id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<Appointment>> GetAppointmentsAsync(
+        DateTime? from,
+        DateTime? to,
+        Guid? doctorId,
+        Guid? patientId,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<Appointment> query = Appointments.AsNoTracking();
+
+        if (from.HasValue)
+        {
+            query = query.Where(appointment => appointment.AppointmentDate >= from.Value);
+        }
+
+        if (to.HasValue)
+        {
+            query = query.Where(appointment => appointment.AppointmentDate <= to.Value);
+        }
+
+        if (doctorId.HasValue)
+        {
+            query = query.Where(appointment => appointment.DoctorId == doctorId.Value);
+        }
+
+        if (patientId.HasValue)
+        {
+            query = query.Where(appointment => appointment.PatientId == patientId.Value);
+        }
+
+        return await query
+            .OrderBy(appointment => appointment.AppointmentDate)
+            .ThenBy(appointment => appointment.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<bool> HasDoctorOverlappingAppointmentAsync(
+        Guid doctorId,
+        DateTime appointmentDate,
+        int durationInMinutes,
+        Guid? excludeAppointmentId,
+        CancellationToken cancellationToken = default)
+    {
+        var appointmentEnd = appointmentDate.AddMinutes(durationInMinutes);
+
+        return Appointments.AnyAsync(existing =>
+            existing.DoctorId == doctorId &&
+            existing.Status != AppointmentStatus.Cancelled &&
+            (!excludeAppointmentId.HasValue || existing.Id != excludeAppointmentId.Value) &&
+            existing.AppointmentDate < appointmentEnd &&
+            appointmentDate < existing.AppointmentDate.AddMinutes(existing.DurationInMinutes),
+            cancellationToken);
     }
 
     public Task<Patient?> GetPatientByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -99,6 +179,26 @@ public sealed class AppDbContext : DbContext, IAppDbContext
             entity.Property(x => x.PasswordHash).HasMaxLength(500).IsRequired();
             entity.Property(x => x.IsActive).HasDefaultValue(true);
             entity.HasIndex(x => x.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<Appointment>(entity =>
+        {
+            entity.Property(x => x.DurationInMinutes).HasDefaultValue(30);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasConversion<int>();
+
+            entity.HasOne<Patient>()
+                .WithMany()
+                .HasForeignKey(x => x.PatientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.DoctorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.DoctorId);
+            entity.HasIndex(x => x.AppointmentDate);
         });
     }
 
