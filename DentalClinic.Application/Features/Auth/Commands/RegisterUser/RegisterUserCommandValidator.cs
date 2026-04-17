@@ -7,17 +7,19 @@ public sealed class RegisterUserCommandValidator : AbstractValidator<RegisterUse
     public RegisterUserCommandValidator()
     {
         RuleFor(x => x.FullName)
-            .NotEmpty()
-            .MaximumLength(200);
+            .NotEmpty().WithMessage("Full name is required.")
+            .MaximumLength(200).WithMessage("Full name must not exceed 200 characters.")
+            .Must(name => !string.IsNullOrWhiteSpace(name)).WithMessage("Full name cannot be only whitespace.");
 
         RuleFor(x => x.Email)
-            .NotEmpty()
-            .EmailAddress()
-            .MaximumLength(150);
+            .NotEmpty().WithMessage("Email is required.")
+            .EmailAddress().WithMessage("Email must be a valid email address.")
+            .MaximumLength(150).WithMessage("Email must not exceed 150 characters.")
+            .Must(email => !string.IsNullOrWhiteSpace(email)).WithMessage("Email cannot be only whitespace.");
 
         RuleFor(x => x.Password)
-            .NotEmpty()
-            .MinimumLength(8)
+            .NotEmpty().WithMessage("Password is required.")
+            .MinimumLength(8).WithMessage("Password must be at least 8 characters long.")
             .Matches("[A-Z]")
             .WithMessage("Password must contain at least one uppercase letter.")
             .Matches("[a-z]")
@@ -28,6 +30,7 @@ public sealed class RegisterUserCommandValidator : AbstractValidator<RegisterUse
             .WithMessage("Password must contain at least one special character.");
 
         RuleFor(x => x.Role)
-            .IsInEnum();
+            .NotEmpty().WithMessage("User role is required.")
+            .IsInEnum().WithMessage("User role must be Admin, Doctor, or Receptionist.");
     }
 }

@@ -25,7 +25,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status201Created)]
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Register([FromBody] RegisterUserRequestDto request, CancellationToken cancellationToken)
     {
-        var command = new RegisterUserCommand(request.FullName, request.Email, request.Password, request.Role == 0 ? UserRole.Receptionist : request.Role);
+        var command = new RegisterUserCommand(request.FullName, request.Email, request.Password, request.Role);
         var response = await _mediator.Send(command, cancellationToken);
         return StatusCode(StatusCodes.Status201Created, ApiResponse<AuthResponseDto>.Ok(response, "User registered successfully."));
     }

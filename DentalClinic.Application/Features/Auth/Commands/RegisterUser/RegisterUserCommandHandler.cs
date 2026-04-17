@@ -27,14 +27,17 @@ public sealed class RegisterUserCommandHandler : IRequestHandler<RegisterUserCom
 
     public async Task<AuthResponseDto> Handle(RegisterUserCommand request, CancellationToken cancellationToken)
     {
+        // Normalize email: trim and convert to lowercase for consistency and uniqueness checks
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        
+        // Check for existing user with same email
         var existingUser = await _dbContext.GetUserByEmailAsync(normalizedEmail, cancellationToken);
-
         if (existingUser is not null)
         {
-            throw new ConflictException("A user with the same email already exists.");
+            throw new ConflictException("A user with this email address is already registered.");
         }
 
+        // Create user entity with normalized data
         var user = new User
         {
             FullName = request.FullName.Trim(),
@@ -43,11 +46,15 @@ public sealed class RegisterUserCommandHandler : IRequestHandler<RegisterUserCom
             IsActive = true
         };
 
+        // Hash password using ASP.NET Core Identity PasswordHasher
+        // Never store plain-text passwords
         user.PasswordHash = _passwordHasherService.HashPassword(user, request.Password);
 
+        // Persist user to database
         await _dbContext.AddUserAsync(user, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // Generate JWT token for immediate authentication
         var token = _jwtTokenService.GenerateToken(user);
 
         return new AuthResponseDto(
