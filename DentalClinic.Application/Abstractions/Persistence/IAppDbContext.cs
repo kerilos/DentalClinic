@@ -31,5 +31,11 @@ public interface IAppDbContext
         Guid? excludeAppointmentId,
         CancellationToken cancellationToken = default);
 
+    Task AddTreatmentAsync(Treatment treatment, CancellationToken cancellationToken = default);
+    Task<Treatment?> GetTreatmentByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Treatment?> GetTreatmentForUpdateByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<Treatment>> GetTreatmentsByPatientIdAsync(Guid patientId, CancellationToken cancellationToken = default);
+    void RemoveTreatment(Treatment treatment);
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

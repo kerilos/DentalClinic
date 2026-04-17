@@ -16,6 +16,7 @@ public sealed class AppDbContext : DbContext, IAppDbContext
 
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<Treatment> Treatments => Set<Treatment>();
     public DbSet<User> Users => Set<User>();
 
     public Task<User?> GetUserByEmailAsync(string email, CancellationToken cancellationToken = default)
@@ -112,6 +113,39 @@ public sealed class AppDbContext : DbContext, IAppDbContext
             cancellationToken);
     }
 
+    public async Task AddTreatmentAsync(Treatment treatment, CancellationToken cancellationToken = default)
+    {
+        await Treatments.AddAsync(treatment, cancellationToken);
+    }
+
+    public Task<Treatment?> GetTreatmentByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Treatments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(treatment => treatment.Id == id, cancellationToken);
+    }
+
+    public Task<Treatment?> GetTreatmentForUpdateByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Treatments
+            .FirstOrDefaultAsync(treatment => treatment.Id == id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<Treatment>> GetTreatmentsByPatientIdAsync(Guid patientId, CancellationToken cancellationToken = default)
+    {
+        return await Treatments
+            .AsNoTracking()
+            .Where(treatment => treatment.PatientId == patientId)
+            .OrderByDescending(treatment => treatment.TreatmentDate)
+            .ThenByDescending(treatment => treatment.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public void RemoveTreatment(Treatment treatment)
+    {
+        Treatments.Remove(treatment);
+    }
+
     public Task<Patient?> GetPatientByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return Patients
@@ -199,6 +233,21 @@ public sealed class AppDbContext : DbContext, IAppDbContext
 
             entity.HasIndex(x => x.DoctorId);
             entity.HasIndex(x => x.AppointmentDate);
+        });
+
+        modelBuilder.Entity<Treatment>(entity =>
+        {
+            entity.Property(x => x.ProcedureName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.Cost).HasColumnType("decimal(18,2)");
+
+            entity.HasOne<Patient>()
+                .WithMany()
+                .HasForeignKey(x => x.PatientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.PatientId);
+            entity.HasIndex(x => x.ToothNumber);
         });
     }
 
