@@ -41,7 +41,7 @@ public sealed class GlobalExceptionHandlingMiddleware
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)statusCode;
 
-        var payload = ApiResponse<object>.Failure(apiError);
+        var payload = ApiResponse<object>.Fail(apiError, apiError.Message);
         await context.Response.WriteAsync(JsonSerializer.Serialize(payload, JsonOptions));
     }
 
@@ -55,7 +55,7 @@ public sealed class GlobalExceptionHandlingMiddleware
                     Code = "ValidationFailed",
                     Message = "One or more validation errors occurred.",
                     TraceId = traceId,
-                    ValidationErrors = validationException.Errors
+                    Details = validationException.Errors
                         .GroupBy(e => e.PropertyName)
                         .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray())
                 }),

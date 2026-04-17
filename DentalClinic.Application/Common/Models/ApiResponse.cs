@@ -2,24 +2,27 @@ namespace DentalClinic.Application.Common.Models;
 
 public sealed class ApiResponse<T>
 {
-    public bool Succeeded { get; init; }
+    public bool Success { get; init; }
+    public string Message { get; init; } = string.Empty;
     public T? Data { get; init; }
     public ApiError? Error { get; init; }
 
-    public static ApiResponse<T> Success(T data)
+    public static ApiResponse<T> Ok(T data, string message = "Request completed successfully.")
     {
         return new ApiResponse<T>
         {
-            Succeeded = true,
+            Success = true,
+            Message = message,
             Data = data
         };
     }
 
-    public static ApiResponse<T> Failure(ApiError error)
+    public static ApiResponse<T> Fail(ApiError error, string message = "Request failed.")
     {
         return new ApiResponse<T>
         {
-            Succeeded = false,
+            Success = false,
+            Message = message,
             Error = error
         };
     }

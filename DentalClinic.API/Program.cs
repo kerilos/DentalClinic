@@ -10,6 +10,7 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    Log.Information("Starting DentalClinic API host");
 
     builder.Host.UseSerilog((context, _, loggerConfiguration) => loggerConfiguration
         .ReadFrom.Configuration(context.Configuration)
