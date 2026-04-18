@@ -8,4 +8,5 @@ public sealed record RegisterUserCommand(
     string FullName,
     string Email,
     string Password,
-    UserRole Role) : IRequest<AuthResponseDto>;
+    string? ClinicName = null,
+    UserRole? RequestedRole = null) : IRequest<AuthResponseDto>;

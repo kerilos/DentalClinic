@@ -9,4 +9,6 @@ public sealed record AddPaymentCommand(
     decimal Amount,
     DateTime PaymentDate,
     PaymentMethod Method,
-    string? Notes) : IRequest<InvoiceDto>;
+    string? Notes,
+    string InvoiceRowVersion,
+    string RequestId) : IRequest<InvoiceDto>;

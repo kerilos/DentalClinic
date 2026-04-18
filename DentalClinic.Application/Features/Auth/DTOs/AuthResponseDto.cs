@@ -7,5 +7,7 @@ public sealed record AuthResponseDto(
     string FullName,
     string Email,
     UserRole Role,
+    string ClinicCode,
     string AccessToken,
+    string RefreshToken,
     DateTime ExpiresAtUtc);

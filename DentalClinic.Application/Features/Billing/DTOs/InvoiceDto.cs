@@ -11,5 +11,6 @@ public sealed record InvoiceDto(
     InvoiceStatus Status,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
+    string RowVersion,
     IReadOnlyCollection<Guid> TreatmentIds,
     IReadOnlyCollection<PaymentDto> Payments);

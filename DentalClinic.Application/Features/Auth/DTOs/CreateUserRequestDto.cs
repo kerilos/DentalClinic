@@ -1,7 +1,9 @@
+using DentalClinic.Domain.Enums;
+
 namespace DentalClinic.Application.Features.Auth.DTOs;
 
-public sealed record RegisterUserRequestDto(
+public sealed record CreateUserRequestDto(
     string FullName,
     string Email,
     string Password,
-    string ClinicName);
+    UserRole Role);

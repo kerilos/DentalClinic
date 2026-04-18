@@ -1,4 +1,5 @@
 using DentalClinic.Application.Abstractions.Persistence;
+using DentalClinic.Application.Abstractions.Security;
 using DentalClinic.Application.Common.Exceptions;
 using DentalClinic.Application.Features.Billing.DTOs;
 using DentalClinic.Domain.Entities;
@@ -10,10 +11,12 @@ namespace DentalClinic.Application.Features.Billing.Commands.CreateInvoice;
 public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand, InvoiceDto>
 {
     private readonly IAppDbContext _dbContext;
+    private readonly ITenantContext _tenantContext;
 
-    public CreateInvoiceCommandHandler(IAppDbContext dbContext)
+    public CreateInvoiceCommandHandler(IAppDbContext dbContext, ITenantContext tenantContext)
     {
         _dbContext = dbContext;
+        _tenantContext = tenantContext;
     }
 
     public async Task<InvoiceDto> Handle(CreateInvoiceCommand request, CancellationToken cancellationToken)
@@ -34,6 +37,7 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
 
         var invoice = new Invoice
         {
+            ClinicId = _tenantContext.ClinicId ?? throw new UnauthorizedAccessException("Clinic context is missing."),
             PatientId = request.PatientId,
             TotalAmount = totalAmount,
             PaidAmount = 0m,
@@ -60,6 +64,7 @@ public sealed class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceC
             invoice.Status,
             invoice.CreatedAt,
             invoice.UpdatedAt,
+            Convert.ToBase64String(invoice.RowVersion),
             orderedTreatmentIds,
             Array.Empty<PaymentDto>());
     }

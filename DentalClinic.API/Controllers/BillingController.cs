@@ -12,7 +12,7 @@ namespace DentalClinic.API.Controllers;
 
 [ApiController]
 [Route("api/invoices")]
-[Authorize]
+[Authorize(Policy = "BillingStaff")]
 public sealed class BillingController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -36,7 +36,14 @@ public sealed class BillingController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<InvoiceDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<InvoiceDto>>> AddPayment(Guid id, [FromBody] AddPaymentRequestDto request, CancellationToken cancellationToken)
     {
-        var command = new AddPaymentCommand(id, request.Amount, request.PaymentDate, request.Method, request.Notes);
+        var command = new AddPaymentCommand(
+            id,
+            request.Amount,
+            request.PaymentDate,
+            request.Method,
+            request.Notes,
+            request.InvoiceRowVersion,
+            request.RequestId);
         var response = await _mediator.Send(command, cancellationToken);
 
         return Ok(ApiResponse<InvoiceDto>.Ok(response, "Payment added successfully."));

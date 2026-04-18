@@ -4,6 +4,7 @@ using DentalClinic.Application.Features.Appointments.DTOs;
 using DentalClinic.Application.Features.Appointments.Mappings;
 using DentalClinic.Domain.Enums;
 using MediatR;
+using System.Data;
 
 namespace DentalClinic.Application.Features.Appointments.Commands.UpdateAppointment;
 
@@ -41,26 +42,31 @@ public sealed class UpdateAppointmentCommandHandler : IRequestHandler<UpdateAppo
             throw new ConflictException("Selected user is not a doctor.");
         }
 
-        var hasConflict = await _dbContext.HasDoctorOverlappingAppointmentAsync(
-            request.DoctorId,
-            request.AppointmentDate,
-            request.DurationInMinutes,
-            appointment.Id,
-            cancellationToken);
-
-        if (hasConflict)
+        await _dbContext.ExecuteInTransactionAsync(async ct =>
         {
-            throw new ConflictException("Doctor is already booked in the selected time range.");
-        }
+            await _dbContext.AcquireDoctorScheduleLockAsync(request.DoctorId, ct);
 
-        appointment.PatientId = request.PatientId;
-        appointment.DoctorId = request.DoctorId;
-        appointment.AppointmentDate = request.AppointmentDate;
-        appointment.DurationInMinutes = request.DurationInMinutes;
-        appointment.Status = request.Status;
-        appointment.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+            var hasConflict = await _dbContext.HasDoctorOverlappingAppointmentAsync(
+                request.DoctorId,
+                request.AppointmentDate,
+                request.DurationInMinutes,
+                appointment.Id,
+                ct);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            if (hasConflict)
+            {
+                throw new ConflictException("Doctor is already booked in the selected time range.");
+            }
+
+            appointment.PatientId = request.PatientId;
+            appointment.DoctorId = request.DoctorId;
+            appointment.AppointmentDate = request.AppointmentDate;
+            appointment.DurationInMinutes = request.DurationInMinutes;
+            appointment.Status = request.Status;
+            appointment.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+
+            await _dbContext.SaveChangesAsync(ct);
+        }, IsolationLevel.Serializable, cancellationToken);
 
         return appointment.ToDto();
     }

@@ -1,39 +1,105 @@
 using DentalClinic.Application.Abstractions.Persistence;
+using DentalClinic.Application.Abstractions.Security;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Domain.Common;
 using DentalClinic.Domain.Entities;
 using DentalClinic.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace DentalClinic.Infrastructure.Persistence;
 
 public sealed class AppDbContext : DbContext, IAppDbContext
 {
+    private readonly ITenantContext _tenantContext;
+
     public AppDbContext(DbContextOptions<AppDbContext> options)
-        : base(options)
+        : this(options, new DesignTimeTenantContext())
     {
     }
 
+    public AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext)
+        : base(options)
+    {
+        _tenantContext = tenantContext;
+    }
+
+    public DbSet<Clinic> Clinics => Set<Clinic>();
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Treatment> Treatments => Set<Treatment>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<User> Users => Set<User>();
 
-    public Task<User?> GetUserByEmailAsync(string email, CancellationToken cancellationToken = default)
+    public Task<Clinic?> GetClinicByCodeAsync(string code, CancellationToken cancellationToken = default)
+    {
+        var normalizedCode = code.Trim().ToUpperInvariant();
+        return Clinics.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(clinic => clinic.Code == normalizedCode, cancellationToken);
+    }
+
+    public Task<Clinic?> GetClinicByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Clinics.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(clinic => clinic.Id == id, cancellationToken);
+    }
+
+    public async Task AddClinicAsync(Clinic clinic, CancellationToken cancellationToken = default)
+    {
+        await Clinics.AddAsync(clinic, cancellationToken);
+    }
+
+    public Task<User?> GetUserByEmailAsync(Guid clinicId, string email, CancellationToken cancellationToken = default)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
-        return Users.AsNoTracking().FirstOrDefaultAsync(user => user.Email == normalizedEmail, cancellationToken);
+        return Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(user => user.ClinicId == clinicId && user.Email == normalizedEmail, cancellationToken);
+    }
+
+    public Task<User?> GetUserByIdInClinicAsync(Guid clinicId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        return Users
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(user => user.ClinicId == clinicId && user.Id == userId, cancellationToken);
     }
 
     public async Task AddUserAsync(User user, CancellationToken cancellationToken = default)
     {
+        if (user.ClinicId == Guid.Empty)
+        {
+            throw new InvalidOperationException("User clinic is required.");
+        }
+
         await Users.AddAsync(user, cancellationToken);
+    }
+
+    public async Task AddRefreshTokenAsync(RefreshToken refreshToken, CancellationToken cancellationToken = default)
+    {
+        if (refreshToken.ClinicId == Guid.Empty || refreshToken.UserId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Refresh token clinic and user are required.");
+        }
+
+        await RefreshTokens.AddAsync(refreshToken, cancellationToken);
+    }
+
+    public Task<RefreshToken?> GetRefreshTokenForUpdateAsync(string tokenHash, CancellationToken cancellationToken = default)
+    {
+        return RefreshTokens
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(refreshToken => refreshToken.TokenHash == tokenHash, cancellationToken);
     }
 
     public async Task AddPatientAsync(Patient patient, CancellationToken cancellationToken = default)
     {
+        if (patient.ClinicId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Patient clinic is required.");
+        }
+
         await Patients.AddAsync(patient, cancellationToken);
     }
 
@@ -46,6 +112,11 @@ public sealed class AppDbContext : DbContext, IAppDbContext
 
     public async Task AddAppointmentAsync(Appointment appointment, CancellationToken cancellationToken = default)
     {
+        if (appointment.ClinicId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Appointment clinic is required.");
+        }
+
         await Appointments.AddAsync(appointment, cancellationToken);
     }
 
@@ -117,6 +188,11 @@ public sealed class AppDbContext : DbContext, IAppDbContext
 
     public async Task AddTreatmentAsync(Treatment treatment, CancellationToken cancellationToken = default)
     {
+        if (treatment.ClinicId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Treatment clinic is required.");
+        }
+
         await Treatments.AddAsync(treatment, cancellationToken);
     }
 
@@ -169,6 +245,11 @@ public sealed class AppDbContext : DbContext, IAppDbContext
 
     public async Task AddInvoiceAsync(Invoice invoice, CancellationToken cancellationToken = default)
     {
+        if (invoice.ClinicId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Invoice clinic is required.");
+        }
+
         await Invoices.AddAsync(invoice, cancellationToken);
     }
 
@@ -196,7 +277,37 @@ public sealed class AppDbContext : DbContext, IAppDbContext
 
     public async Task AddPaymentAsync(Payment payment, CancellationToken cancellationToken = default)
     {
+        if (payment.ClinicId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Payment clinic is required.");
+        }
+
         await Payments.AddAsync(payment, cancellationToken);
+    }
+
+    public Task<bool> PaymentRequestExistsAsync(Guid invoiceId, string requestId, CancellationToken cancellationToken = default)
+    {
+        return Payments
+            .AsNoTracking()
+            .AnyAsync(payment => payment.InvoiceId == invoiceId && payment.RequestId == requestId, cancellationToken);
+    }
+
+    public async Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, IsolationLevel isolationLevel, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await Database.BeginTransactionAsync(isolationLevel, cancellationToken);
+        await action(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public Task AcquireDoctorScheduleLockAsync(Guid doctorId, CancellationToken cancellationToken = default)
+    {
+        var resource = $"doctor:{doctorId}";
+        var lockMode = "Exclusive";
+        var lockOwner = "Transaction";
+
+        return Database.ExecuteSqlInterpolatedAsync(
+            $"EXEC sp_getapplock @Resource = {resource}, @LockMode = {lockMode}, @LockOwner = {lockOwner}, @LockTimeout = {5000}",
+            cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<Payment>> GetPaymentsByInvoiceIdAsync(Guid invoiceId, CancellationToken cancellationToken = default)
@@ -228,10 +339,10 @@ public sealed class AppDbContext : DbContext, IAppDbContext
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var searchTerm = search.Trim().ToLowerInvariant();
+            var searchTerm = $"%{search.Trim()}%";
             query = query.Where(patient =>
-                patient.FullName.ToLower().Contains(searchTerm) ||
-                patient.PhoneNumber.ToLower().Contains(searchTerm));
+                EF.Functions.Like(patient.FullName, searchTerm) ||
+                EF.Functions.Like(patient.PhoneNumber, searchTerm));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -258,31 +369,51 @@ public sealed class AppDbContext : DbContext, IAppDbContext
 
         modelBuilder.Entity<Patient>(entity =>
         {
+            entity.Property(x => x.ClinicId).IsRequired();
             entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
             entity.Property(x => x.PhoneNumber).HasMaxLength(30).IsRequired();
             entity.Property(x => x.Notes).HasMaxLength(2000);
             entity.Property(x => x.IsDeleted).HasDefaultValue(false);
 
-            entity.HasIndex(x => x.FullName);
-            entity.HasIndex(x => x.PhoneNumber);
+            entity.HasOne<Clinic>()
+                .WithMany()
+                .HasForeignKey(x => x.ClinicId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasQueryFilter(x => !x.IsDeleted);
+            entity.HasIndex(x => new { x.ClinicId, x.FullName });
+            entity.HasIndex(x => new { x.ClinicId, x.PhoneNumber });
+
+            entity.HasQueryFilter(x => !x.IsDeleted && x.ClinicId == _tenantContext.ClinicId);
         });
 
         modelBuilder.Entity<User>(entity =>
         {
+            entity.Property(x => x.ClinicId).IsRequired();
             entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Email).HasMaxLength(150).IsRequired();
             entity.Property(x => x.PasswordHash).HasMaxLength(500).IsRequired();
             entity.Property(x => x.IsActive).HasDefaultValue(true);
-            entity.HasIndex(x => x.Email).IsUnique();
+
+            entity.HasOne<Clinic>()
+                .WithMany()
+                .HasForeignKey(x => x.ClinicId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.ClinicId, x.Email }).IsUnique();
+            entity.HasQueryFilter(x => x.ClinicId == _tenantContext.ClinicId);
         });
 
         modelBuilder.Entity<Appointment>(entity =>
         {
+            entity.Property(x => x.ClinicId).IsRequired();
             entity.Property(x => x.DurationInMinutes).HasDefaultValue(30);
             entity.Property(x => x.Notes).HasMaxLength(2000);
             entity.Property(x => x.Status).HasConversion<int>();
+
+            entity.HasOne<Clinic>()
+                .WithMany()
+                .HasForeignKey(x => x.ClinicId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne<Patient>()
                 .WithMany()
@@ -294,15 +425,22 @@ public sealed class AppDbContext : DbContext, IAppDbContext
                 .HasForeignKey(x => x.DoctorId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(x => x.DoctorId);
-            entity.HasIndex(x => x.AppointmentDate);
+            entity.HasIndex(x => new { x.ClinicId, x.DoctorId, x.AppointmentDate });
+            entity.HasIndex(x => new { x.ClinicId, x.PatientId });
+            entity.HasQueryFilter(x => x.ClinicId == _tenantContext.ClinicId);
         });
 
         modelBuilder.Entity<Treatment>(entity =>
         {
+            entity.Property(x => x.ClinicId).IsRequired();
             entity.Property(x => x.ProcedureName).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(2000);
             entity.Property(x => x.Cost).HasColumnType("decimal(18,2)");
+
+            entity.HasOne<Clinic>()
+                .WithMany()
+                .HasForeignKey(x => x.ClinicId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne<Patient>()
                 .WithMany()
@@ -314,29 +452,44 @@ public sealed class AppDbContext : DbContext, IAppDbContext
                 .HasForeignKey(x => x.InvoiceId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasIndex(x => x.PatientId);
-            entity.HasIndex(x => x.ToothNumber);
+            entity.HasIndex(x => new { x.ClinicId, x.PatientId });
+            entity.HasIndex(x => new { x.ClinicId, x.ToothNumber });
+            entity.HasQueryFilter(x => x.ClinicId == _tenantContext.ClinicId);
         });
 
         modelBuilder.Entity<Invoice>(entity =>
         {
+            entity.Property(x => x.ClinicId).IsRequired();
             entity.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
             entity.Property(x => x.PaidAmount).HasColumnType("decimal(18,2)");
             entity.Property(x => x.Status).HasConversion<int>();
+
+            entity.HasOne<Clinic>()
+                .WithMany()
+                .HasForeignKey(x => x.ClinicId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne<Patient>()
                 .WithMany()
                 .HasForeignKey(x => x.PatientId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(x => x.PatientId);
+            entity.HasIndex(x => new { x.ClinicId, x.PatientId });
+            entity.HasQueryFilter(x => x.ClinicId == _tenantContext.ClinicId);
         });
 
         modelBuilder.Entity<Payment>(entity =>
         {
+            entity.Property(x => x.ClinicId).IsRequired();
             entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
             entity.Property(x => x.Method).HasConversion<int>();
             entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.RequestId).HasMaxLength(100).IsRequired();
+
+            entity.HasOne<Clinic>()
+                .WithMany()
+                .HasForeignKey(x => x.ClinicId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne<Invoice>()
                 .WithMany()
@@ -344,7 +497,50 @@ public sealed class AppDbContext : DbContext, IAppDbContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(x => x.InvoiceId);
+            entity.HasIndex(x => new { x.InvoiceId, x.RequestId }).IsUnique();
+            entity.HasQueryFilter(x => x.ClinicId == _tenantContext.ClinicId);
         });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.Property(x => x.ClinicId).IsRequired();
+            entity.Property(x => x.UserId).IsRequired();
+            entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
+
+            entity.HasOne<Clinic>()
+                .WithMany()
+                .HasForeignKey(x => x.ClinicId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.ClinicId, x.UserId });
+            entity.HasQueryFilter(x => x.ClinicId == _tenantContext.ClinicId);
+        });
+
+        modelBuilder.Entity<Clinic>(entity =>
+        {
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+
+            entity.HasIndex(x => x.Code).IsUnique();
+        });
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            if (typeof(BaseEntity).IsAssignableFrom(entityType.ClrType))
+            {
+                modelBuilder.Entity(entityType.ClrType)
+                    .Property<byte[]>(nameof(BaseEntity.RowVersion))
+                    .IsRowVersion()
+                    .IsConcurrencyToken();
+            }
+        }
     }
 
     private void ApplyAuditFields()
@@ -365,4 +561,11 @@ public sealed class AppDbContext : DbContext, IAppDbContext
             }
         }
     }
+}
+
+internal sealed class DesignTimeTenantContext : ITenantContext
+{
+    public Guid? ClinicId => null;
+
+    public bool HasTenant => false;
 }

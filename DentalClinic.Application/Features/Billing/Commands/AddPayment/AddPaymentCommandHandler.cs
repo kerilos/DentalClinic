@@ -5,6 +5,7 @@ using DentalClinic.Application.Features.Billing.Mappings;
 using DentalClinic.Domain.Entities;
 using DentalClinic.Domain.Enums;
 using MediatR;
+using System.Data;
 
 namespace DentalClinic.Application.Features.Billing.Commands.AddPayment;
 
@@ -19,33 +20,57 @@ public sealed class AddPaymentCommandHandler : IRequestHandler<AddPaymentCommand
 
     public async Task<InvoiceDto> Handle(AddPaymentCommand request, CancellationToken cancellationToken)
     {
-        var invoice = await _dbContext.GetInvoiceForUpdateByIdAsync(request.InvoiceId, cancellationToken);
+        Invoice? invoice = null;
+
+        await _dbContext.ExecuteInTransactionAsync(async ct =>
+        {
+            invoice = await _dbContext.GetInvoiceForUpdateByIdAsync(request.InvoiceId, ct);
+            if (invoice is null)
+            {
+                throw new NotFoundException("Invoice not found.");
+            }
+
+            var expectedRowVersion = Convert.FromBase64String(request.InvoiceRowVersion);
+            if (!invoice.RowVersion.SequenceEqual(expectedRowVersion))
+            {
+                throw new ConflictException("Invoice was modified by another request. Refresh and retry.");
+            }
+
+            var requestAlreadyProcessed = await _dbContext.PaymentRequestExistsAsync(invoice.Id, request.RequestId, ct);
+            if (requestAlreadyProcessed)
+            {
+                return;
+            }
+
+            var remainingBalance = invoice.TotalAmount - invoice.PaidAmount;
+            if (request.Amount > remainingBalance)
+            {
+                throw new ConflictException("Payment amount cannot exceed remaining balance.");
+            }
+
+            var payment = new Payment
+            {
+                ClinicId = invoice.ClinicId,
+                InvoiceId = invoice.Id,
+                RequestId = request.RequestId.Trim(),
+                Amount = request.Amount,
+                PaymentDate = request.PaymentDate,
+                Method = request.Method,
+                Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim()
+            };
+
+            await _dbContext.AddPaymentAsync(payment, ct);
+
+            invoice.PaidAmount += request.Amount;
+            invoice.Status = ResolveStatus(invoice.PaidAmount, invoice.TotalAmount);
+
+            await _dbContext.SaveChangesAsync(ct);
+        }, IsolationLevel.Serializable, cancellationToken);
+
         if (invoice is null)
         {
             throw new NotFoundException("Invoice not found.");
         }
-
-        var remainingBalance = invoice.TotalAmount - invoice.PaidAmount;
-        if (request.Amount > remainingBalance)
-        {
-            throw new ConflictException("Payment amount cannot exceed remaining balance.");
-        }
-
-        var payment = new Payment
-        {
-            InvoiceId = invoice.Id,
-            Amount = request.Amount,
-            PaymentDate = request.PaymentDate,
-            Method = request.Method,
-            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim()
-        };
-
-        await _dbContext.AddPaymentAsync(payment, cancellationToken);
-
-        invoice.PaidAmount += request.Amount;
-        invoice.Status = ResolveStatus(invoice.PaidAmount, invoice.TotalAmount);
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
 
         var payments = await _dbContext.GetPaymentsByInvoiceIdAsync(invoice.Id, cancellationToken);
         var treatmentIds = await _dbContext.GetTreatmentIdsByInvoiceIdAsync(invoice.Id, cancellationToken);
@@ -59,6 +84,7 @@ public sealed class AddPaymentCommandHandler : IRequestHandler<AddPaymentCommand
             invoice.Status,
             invoice.CreatedAt,
             invoice.UpdatedAt,
+            Convert.ToBase64String(invoice.RowVersion),
             treatmentIds,
             payments.Select(p => p.ToDto()).ToArray());
     }

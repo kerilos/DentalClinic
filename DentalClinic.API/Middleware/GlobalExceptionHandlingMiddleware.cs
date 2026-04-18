@@ -4,6 +4,7 @@ using System.Text.Json;
 using DentalClinic.Application.Common.Exceptions;
 using DentalClinic.Application.Common.Models;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 
 namespace DentalClinic.API.Middleware;
 
@@ -66,6 +67,13 @@ public sealed class GlobalExceptionHandlingMiddleware
                 {
                     Code = "Conflict",
                     Message = conflictException.Message,
+                    TraceId = traceId
+                }),
+            DbUpdateConcurrencyException =>
+                (HttpStatusCode.Conflict, new ApiError
+                {
+                    Code = "ConcurrencyConflict",
+                    Message = "The record was modified by another request. Refresh and retry.",
                     TraceId = traceId
                 }),
             NotFoundException notFoundException =>

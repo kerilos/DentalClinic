@@ -12,7 +12,7 @@ namespace DentalClinic.API.Controllers;
 
 [ApiController]
 [Route("api/treatments")]
-[Authorize]
+[Authorize(Policy = "DoctorOrAdmin")]
 public sealed class TreatmentsController : ControllerBase
 {
     private readonly IMediator _mediator;

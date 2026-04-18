@@ -4,6 +4,7 @@ namespace DentalClinic.Domain.Entities;
 
 public sealed class Treatment : BaseEntity
 {
+    public Guid ClinicId { get; set; }
     public Guid PatientId { get; set; }
     public Guid? InvoiceId { get; set; }
     public int ToothNumber { get; set; }

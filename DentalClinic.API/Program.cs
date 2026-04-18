@@ -2,9 +2,12 @@ using System.Text;
 using DentalClinic.API.Middleware;
 using DentalClinic.Application;
 using DentalClinic.Infrastructure;
+using DentalClinic.Infrastructure.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using System.Threading.RateLimiting;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -25,14 +28,48 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
     builder.Services.AddHealthChecks();
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.AddPolicy("AuthPolicy", context =>
+        {
+            var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: ip,
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                });
+        });
+    });
 
     builder.Services.AddApplication();
-    builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 
     var jwtSection = builder.Configuration.GetSection("Jwt");
-    var secretKey = jwtSection["SecretKey"] ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.");
-    var issuer = jwtSection["Issuer"] ?? throw new InvalidOperationException("Jwt:Issuer is not configured.");
-    var audience = jwtSection["Audience"] ?? throw new InvalidOperationException("Jwt:Audience is not configured.");
+    var jwtOptions = jwtSection.Get<JwtOptions>();
+    if (jwtOptions is null ||
+        string.IsNullOrWhiteSpace(jwtOptions.SecretKey) ||
+        string.IsNullOrWhiteSpace(jwtOptions.Issuer) ||
+        string.IsNullOrWhiteSpace(jwtOptions.Audience) ||
+        jwtOptions.ExpirationMinutes <= 0)
+    {
+        if (!builder.Environment.IsDevelopment())
+        {
+            throw new InvalidOperationException("Jwt settings must be fully configured.");
+        }
+
+        jwtOptions = new JwtOptions
+        {
+            SecretKey = "DevelopmentOnly-Local-Secret-Key-Change-In-Production-1234567890",
+            Issuer = "DentalClinic.API",
+            Audience = "DentalClinic.Client",
+            ExpirationMinutes = 60
+        };
+    }
 
     builder.Services.AddAuthentication(options =>
     {
@@ -47,24 +84,34 @@ try
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = issuer,
-            ValidAudience = audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+            ValidIssuer = jwtOptions.Issuer,
+            ValidAudience = jwtOptions.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SecretKey)),
             ClockSkew = TimeSpan.FromMinutes(1)
         };
     });
 
-    builder.Services.AddAuthorization();
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+        options.AddPolicy("ClinicalStaff", policy => policy.RequireRole("Admin", "Doctor", "Receptionist"));
+        options.AddPolicy("DoctorOrAdmin", policy => policy.RequireRole("Admin", "Doctor"));
+        options.AddPolicy("BillingStaff", policy => policy.RequireRole("Admin", "Receptionist"));
+    });
 
     var app = builder.Build();
 
     app.UseSerilogRequestLogging();
     app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
 
     app.UseHttpsRedirection();
+    app.UseRateLimiter();
     app.UseAuthentication();
     app.UseAuthorization();
 

@@ -35,6 +35,7 @@ public sealed class GetInvoiceByIdQueryHandler : IRequestHandler<GetInvoiceByIdQ
             invoice.Status,
             invoice.CreatedAt,
             invoice.UpdatedAt,
+            Convert.ToBase64String(invoice.RowVersion),
             treatmentIds,
             payments.Select(payment => payment.ToDto()).ToArray());
     }

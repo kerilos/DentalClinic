@@ -5,6 +5,7 @@ namespace DentalClinic.Domain.Entities;
 
 public sealed class Appointment : BaseEntity
 {
+    public Guid ClinicId { get; set; }
     public Guid PatientId { get; set; }
     public Guid DoctorId { get; set; }
     public DateTime AppointmentDate { get; set; }

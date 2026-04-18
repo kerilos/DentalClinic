@@ -29,8 +29,14 @@ public sealed class RegisterUserCommandValidator : AbstractValidator<RegisterUse
             .Matches("[^a-zA-Z0-9]")
             .WithMessage("Password must contain at least one special character.");
 
-        RuleFor(x => x.Role)
-            .NotEmpty().WithMessage("User role is required.")
-            .IsInEnum().WithMessage("User role must be Admin, Doctor, or Receptionist.");
+        RuleFor(x => x.RequestedRole)
+            .IsInEnum()
+            .When(x => x.RequestedRole.HasValue)
+            .WithMessage("User role must be Admin, Doctor, or Receptionist.");
+
+        RuleFor(x => x.ClinicName)
+            .NotEmpty().WithMessage("Clinic name is required.")
+            .MaximumLength(200).WithMessage("Clinic name cannot exceed 200 characters.")
+            .When(x => !x.RequestedRole.HasValue);
     }
 }

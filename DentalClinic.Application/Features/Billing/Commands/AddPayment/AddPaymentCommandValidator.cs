@@ -23,5 +23,12 @@ public sealed class AddPaymentCommandValidator : AbstractValidator<AddPaymentCom
         RuleFor(x => x.Notes)
             .MaximumLength(2000).When(x => x.Notes is not null)
             .WithMessage("Notes cannot exceed 2000 characters.");
+
+        RuleFor(x => x.InvoiceRowVersion)
+            .NotEmpty().WithMessage("Invoice row version is required.");
+
+        RuleFor(x => x.RequestId)
+            .NotEmpty().WithMessage("Request id is required.")
+            .MaximumLength(100).WithMessage("Request id cannot exceed 100 characters.");
     }
 }

@@ -1,4 +1,5 @@
 using DentalClinic.Application.Abstractions.Persistence;
+using DentalClinic.Application.Abstractions.Security;
 using DentalClinic.Application.Common.Exceptions;
 using DentalClinic.Application.Features.Treatments.DTOs;
 using DentalClinic.Application.Features.Treatments.Mappings;
@@ -10,10 +11,12 @@ namespace DentalClinic.Application.Features.Treatments.Commands.CreateTreatment;
 public sealed class CreateTreatmentCommandHandler : IRequestHandler<CreateTreatmentCommand, TreatmentDto>
 {
     private readonly IAppDbContext _dbContext;
+    private readonly ITenantContext _tenantContext;
 
-    public CreateTreatmentCommandHandler(IAppDbContext dbContext)
+    public CreateTreatmentCommandHandler(IAppDbContext dbContext, ITenantContext tenantContext)
     {
         _dbContext = dbContext;
+        _tenantContext = tenantContext;
     }
 
     public async Task<TreatmentDto> Handle(CreateTreatmentCommand request, CancellationToken cancellationToken)
@@ -26,6 +29,7 @@ public sealed class CreateTreatmentCommandHandler : IRequestHandler<CreateTreatm
 
         var treatment = new Treatment
         {
+            ClinicId = _tenantContext.ClinicId ?? throw new UnauthorizedAccessException("Clinic context is missing."),
             PatientId = request.PatientId,
             ToothNumber = request.ToothNumber,
             ProcedureName = request.ProcedureName.Trim(),

@@ -1,12 +1,21 @@
 using DentalClinic.Domain.Entities;
 using DentalClinic.Application.Common.Models;
+using System.Data;
 
 namespace DentalClinic.Application.Abstractions.Persistence;
 
 public interface IAppDbContext
 {
-    Task<User?> GetUserByEmailAsync(string email, CancellationToken cancellationToken = default);
+    Task<Clinic?> GetClinicByCodeAsync(string code, CancellationToken cancellationToken = default);
+    Task<Clinic?> GetClinicByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task AddClinicAsync(Clinic clinic, CancellationToken cancellationToken = default);
+
+    Task<User?> GetUserByEmailAsync(Guid clinicId, string email, CancellationToken cancellationToken = default);
+    Task<User?> GetUserByIdInClinicAsync(Guid clinicId, Guid userId, CancellationToken cancellationToken = default);
     Task AddUserAsync(User user, CancellationToken cancellationToken = default);
+
+    Task AddRefreshTokenAsync(RefreshToken refreshToken, CancellationToken cancellationToken = default);
+    Task<RefreshToken?> GetRefreshTokenForUpdateAsync(string tokenHash, CancellationToken cancellationToken = default);
 
     Task AddPatientAsync(Patient patient, CancellationToken cancellationToken = default);
     Task<Patient?> GetPatientByIdAsync(Guid id, CancellationToken cancellationToken = default);
@@ -46,6 +55,10 @@ public interface IAppDbContext
 
     Task AddPaymentAsync(Payment payment, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Payment>> GetPaymentsByInvoiceIdAsync(Guid invoiceId, CancellationToken cancellationToken = default);
+    Task<bool> PaymentRequestExistsAsync(Guid invoiceId, string requestId, CancellationToken cancellationToken = default);
+
+    Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, IsolationLevel isolationLevel, CancellationToken cancellationToken = default);
+    Task AcquireDoctorScheduleLockAsync(Guid doctorId, CancellationToken cancellationToken = default);
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
