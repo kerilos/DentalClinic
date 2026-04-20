@@ -38,7 +38,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Login([FromBody] LoginUserRequestDto request, CancellationToken cancellationToken)
     {
-        var query = new LoginUserQuery(request.ClinicCode, request.Email, request.Password);
+        var query = new LoginUserQuery(request.ClinicName, request.Email, request.Password);
         var response = await _mediator.Send(query, cancellationToken);
         return Ok(ApiResponse<AuthResponseDto>.Ok(response, "Login successful."));
     }

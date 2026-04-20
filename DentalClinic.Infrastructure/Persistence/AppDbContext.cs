@@ -39,6 +39,12 @@ public sealed class AppDbContext : DbContext, IAppDbContext
         return Clinics.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(clinic => clinic.Code == normalizedCode, cancellationToken);
     }
 
+    public Task<Clinic?> GetClinicByNameAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var normalizedName = name.Trim();
+        return Clinics.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(clinic => clinic.Name == normalizedName, cancellationToken);
+    }
+
     public Task<Clinic?> GetClinicByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return Clinics.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(clinic => clinic.Id == id, cancellationToken);

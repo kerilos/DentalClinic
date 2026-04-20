@@ -7,6 +7,7 @@ namespace DentalClinic.Application.Abstractions.Persistence;
 public interface IAppDbContext
 {
     Task<Clinic?> GetClinicByCodeAsync(string code, CancellationToken cancellationToken = default);
+    Task<Clinic?> GetClinicByNameAsync(string name, CancellationToken cancellationToken = default);
     Task<Clinic?> GetClinicByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task AddClinicAsync(Clinic clinic, CancellationToken cancellationToken = default);
 

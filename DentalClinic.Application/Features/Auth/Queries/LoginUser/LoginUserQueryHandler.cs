@@ -32,7 +32,7 @@ public sealed class LoginUserQueryHandler : IRequestHandler<LoginUserQuery, Auth
         // Normalize email: trim and convert to lowercase to match stored format
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
-        var clinic = await _dbContext.GetClinicByCodeAsync(request.ClinicCode, cancellationToken);
+        var clinic = await _dbContext.GetClinicByNameAsync(request.ClinicName, cancellationToken);
         if (clinic is null || !clinic.IsActive)
         {
             throw new AuthenticationException("Invalid credentials.");

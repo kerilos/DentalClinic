@@ -6,9 +6,10 @@ public sealed class LoginUserQueryValidator : AbstractValidator<LoginUserQuery>
 {
     public LoginUserQueryValidator()
     {
-        RuleFor(x => x.ClinicCode)
-            .NotEmpty().WithMessage("Clinic code is required.")
-            .MaximumLength(50).WithMessage("Clinic code cannot exceed 50 characters.");
+        RuleFor(x => x.ClinicName)
+            .NotEmpty().WithMessage("Clinic name is required.")
+            .MaximumLength(200).WithMessage("Clinic name cannot exceed 200 characters.")
+            .Must(name => !string.IsNullOrWhiteSpace(name)).WithMessage("Clinic name cannot be only whitespace.");
 
         RuleFor(x => x.Email)
             .NotEmpty().WithMessage("Email is required.")
